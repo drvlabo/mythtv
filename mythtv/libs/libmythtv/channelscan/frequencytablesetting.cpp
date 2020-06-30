@@ -77,6 +77,7 @@ ScanCountry::ScanCountry()
     addSelection(QObject::tr("Spain"),          "es", country == "es");
     addSelection(QObject::tr("Sweden"),         "se", country == "se");
     addSelection(QObject::tr("United Kingdom"), "gb", country == "gb");
+    addSelection(QObject::tr("Japan"),          "jp", country == "jp");
 }
 
 // Frequency tables for DVB-C cable networks per country

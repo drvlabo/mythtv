@@ -1919,7 +1919,18 @@ bool TVRec::SetupDTVSignalMonitor(bool EITscan)
         auto *dsd = dynamic_cast<DVBStreamData*>(sd);
         if (!dsd)
         {
-            sd = dsd = new DVBStreamData(netid, tsid, progNum, m_inputId);
+            DVBChannel *dvbchannel = dynamic_cast<DVBChannel*>(m_channel);
+            if (dvbchannel)
+            {
+                DVBKind dvbkind;
+                if (dvbchannel->GetFrontendName().indexOf("ISDB") >= 0)
+                    dvbkind = kKindISDB;
+                else
+                    dvbkind = kKindDVB;
+                sd = dsd = new DVBStreamData(netid, tsid, progNum, m_inputId, false, dvbkind);
+            }
+            else
+                sd = dsd = new DVBStreamData(netid, tsid, progNum, m_inputId);
             sd->SetCaching(true);
             if (GetDTVRecorder())
                 GetDTVRecorder()->SetStreamData(dsd);

@@ -746,7 +746,13 @@ static int pid_printer(const MythUtilCommandLineParser &cmdline)
     bool autopts = !cmdline.toBool("noautopts");
     bool use_xml = cmdline.toBool("xml");
 
-    auto *sd = new ScanStreamData(true);
+    bool isISDB = cmdline.toBool("is_isdb");
+    bool isDVB = cmdline.toBool("is_dvb");
+    DVBKind dvbkind = kKindISDB;
+    if((isDVB) || !(isISDB)) {
+        dvbkind = kKindDVB;
+    }
+    auto *sd = new ScanStreamData(true, dvbkind);
     for (QHash<uint,bool>::iterator it = use_pid.begin();
          it != use_pid.end(); ++it)
     {

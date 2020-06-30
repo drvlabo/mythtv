@@ -168,7 +168,16 @@ ChannelScanSM::ChannelScanSM(ScanMonitor *_scan_monitor,
     if (dtvSigMon)
     {
         LOG(VB_CHANSCAN, LOG_INFO, LOC + "Connecting up DTVSignalMonitor");
-        auto *data = new ScanStreamData();
+
+        DVBKind dvbkind = kKindDVB;
+#ifdef USING_DVB
+        DVBChannel *dvbchannel = dynamic_cast<DVBChannel*>(_channel);
+        if (dvbchannel) {
+            if (dvbchannel->GetFrontendName().indexOf("ISDB") >= 0)
+                dvbkind = kKindISDB;
+        }
+#endif
+        auto *data = new ScanStreamData(dvbkind);
 
         MSqlQuery query(MSqlQuery::InitCon());
         query.prepare(
@@ -203,7 +212,7 @@ ChannelScanSM::ChannelScanSM(ScanMonitor *_scan_monitor,
                             SignalMonitor::kDTVSigMon_WaitForSDT);
 
 #ifdef USING_DVB
-        auto *dvbchannel = dynamic_cast<DVBChannel*>(m_channel);
+        //auto *dvbchannel = dynamic_cast<DVBChannel*>(m_channel);
         if (dvbchannel && dvbchannel->GetRotor())
             dtvSigMon->AddFlags(SignalMonitor::kDVBSigMon_WaitForPos);
 #endif

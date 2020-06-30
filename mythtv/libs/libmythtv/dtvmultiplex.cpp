@@ -425,7 +425,7 @@ bool DTVMultiplex::FillFromDB(DTVTunerType type, uint mplexid)
         "       hp_code_rate,      lp_code_rate,   constellation, "
         "       transmission_mode, guard_interval, hierarchy, "
         "       modulation,        bandwidth,      sistandard, "
-        "       mod_sys,           rolloff "
+        "       mod_sys,           rolloff,        transportid "
         "FROM dtv_multiplex "
         "WHERE dtv_multiplex.mplexid = :MPLEXID");
     query.bindValue(":MPLEXID", mplexid);
@@ -447,6 +447,7 @@ bool DTVMultiplex::FillFromDB(DTVTunerType type, uint mplexid)
 
     m_mplex = mplexid;
     m_sistandard = query.value(13).toString();
+    m_transportid = query.value(16).toInt();
 
     // Parse the query into our DVBTuning class
     return ParseTuningParams(

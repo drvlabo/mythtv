@@ -5,12 +5,14 @@
 
 #include <cassert>
 
+#include <QByteArray>
 #include <QMutex>
 #include <QString>
 
 #include "mythtvexp.h" // MTV_PUBLIC - Symbol Visibility
 #include "mpegdescriptors.h"
 #include "programinfo.h" // for subtitle types and audio and video properties
+#include "isdb_decode_text.h"
 
 /*
 // needed for scanning
@@ -37,16 +39,50 @@
 
 static QString coderate_inner(uint coderate);
 
-extern QString dvb_decode_text(const unsigned char *src, uint length,
-                               const unsigned char *encoding_override,
-                               uint encoding_override_length);
-
-inline QString dvb_decode_text(const unsigned char *src, uint length)
+class DVBDescriptor : public MPEGDescriptor
 {
-    return dvb_decode_text(src, length, nullptr, 0);
-}
+  public:
+    DVBDescriptor(const unsigned char *data, DVBKind dvbkind = kKindUnknown, int len = 300, uint tag = (uint)NULL)
+        : MPEGDescriptor(data, len, tag), m_dvbkind(dvbkind)
+    {
+        if ((len < 2) || (int(DescriptorLength()) + 2) > len)
+            m_data = NULL;
+        else if (DescriptorTag() != tag)
+            m_data = NULL;
+        if (m_dvbkind == kKindISDB) {
+            QDateTime dt1 = QDateTime::currentDateTime();
+            QDateTime dt2 = dt1.toUTC();
+            dt1.setTimeSpec(Qt::UTC);
 
-QString dvb_decode_short_name(const unsigned char *src, uint raw_length);
+            int offset = dt2.secsTo(dt1) / 3600;
+            if (9 == offset)
+                hisdbdecode = isdb_decode_open(ISDB_ARIB);
+            else
+                hisdbdecode = isdb_decode_open(ISDB_ABNT);
+         }
+         else
+            hisdbdecode = (IsdbDecode)NULL;
+    }
+    virtual ~DVBDescriptor() {
+        if (hisdbdecode != (IsdbDecode)NULL)
+            isdb_decode_close(hisdbdecode);
+    }
+
+    static const unsigned char* FindBestMatch(
+        const desc_list_t &parsed, uint desc_tag, QMap<uint,uint> &langPref, DVBKind dvbkind);
+    static desc_list_t FindBestMatches(
+        const desc_list_t &parsed, uint desc_tag, QMap<uint,uint> &langPref, DVBKind dvbkind);
+
+    QString dvb_decode_text(const unsigned char *src, uint length,
+                            const unsigned char *encoding_override = NULL,
+                            uint encoding_override_length = 0) const;
+    QString dvb_decode_short_name(const unsigned char *src, uint raw_length) const;
+    virtual QString toString(void) const override;
+  protected:
+    const DVBKind m_dvbkind;
+  private:
+    IsdbDecode hisdbdecode;
+};
 
 #define byteBCDH2int(i) ((i) >> 4)
 #define byteBCDL2int(i) ((i) & 0x0f)
@@ -65,11 +101,11 @@ QString dvb_decode_short_name(const unsigned char *src, uint raw_length);
    byteBCDH2int(l) * 10         + byteBCDL2int(l))
 
 // DVB Bluebook A038 (Sept 2011) p 77
-class NetworkNameDescriptor : public MPEGDescriptor
+class NetworkNameDescriptor : public DVBDescriptor
 {
   public:
-    explicit NetworkNameDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::network_name) { }
+    explicit NetworkNameDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::network_name) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x40
     // descriptor_length        8   1.0
@@ -266,11 +302,11 @@ class AnnouncementSupportDescriptor : public MPEGDescriptor
 };
 
 // DVB Bluebook A038 (Sept 2011) p 41
-class BouquetNameDescriptor : public MPEGDescriptor
+class BouquetNameDescriptor : public DVBDescriptor
 {
   public:
-    explicit BouquetNameDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::bouquet_name) { }
+    explicit BouquetNameDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::bouquet_name) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x47
     // descriptor_length        8   1.0
@@ -579,11 +615,11 @@ class ComponentDescriptor : public MPEGDescriptor
 };
 
 // DVB Bluebook A038 (Sept 2011) p 46
-class ContentDescriptor : public MPEGDescriptor
+class ContentDescriptor : public DVBDescriptor
 {
   public:
-    explicit ContentDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::content) { }
+    explicit ContentDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::content) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x54
     // descriptor_length        8   1.0
@@ -610,7 +646,7 @@ class ContentDescriptor : public MPEGDescriptor
     QString toString(void) const override; // MPEGDescriptor
 
   protected:
-    static void Init(void);
+    static void Init(DVBKind dvbkind);
 
   protected:
     static QMutex             s_categoryLock;
@@ -656,11 +692,11 @@ class CountryAvailabilityDescriptor : public MPEGDescriptor
 };
 
 // DVB Bluebook A038 (Sept 2011) p 50
-class DataBroadcastDescriptor : public MPEGDescriptor
+class DataBroadcastDescriptor : public DVBDescriptor
 {
   public:
-    explicit DataBroadcastDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::data_broadcast) { }
+    explicit DataBroadcastDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::data_broadcast) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x64
     // descriptor_length        8   1.0
@@ -1085,11 +1121,11 @@ class DSNGDescriptor : public MPEGDescriptor
 };
 
 // DVB Bluebook A038 (Sept 2011) p 58
-class ExtendedEventDescriptor : public MPEGDescriptor
+class ExtendedEventDescriptor : public DVBDescriptor
 {
   public:
-    explicit ExtendedEventDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::extended_event) { }
+    explicit ExtendedEventDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::extended_event) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x4e
     // descriptor_length        8   1.0
@@ -1116,6 +1152,44 @@ class ExtendedEventDescriptor : public MPEGDescriptor
     //   item_length            8   1.0+p2
     //   for (j=0;j<N;j++) { item_char 8 }
     // }
+    QString ItemText(QByteArray& saved_text) const
+        {
+           QString     item;
+           uint        left, p = 7, ItemDescriptionLen, ItemLength;
+           item = "";
+           left = LengthOfItems();
+           while (left > 0) {
+               ItemDescriptionLen = m_data[p++];
+               p += ItemDescriptionLen;
+               ItemLength = m_data[p++];
+               if (ItemDescriptionLen > 0)
+                       saved_text.clear();
+               QByteArray item_byte =
+                   QByteArray::fromRawData((char *)&m_data[p], ItemLength);
+               left -= 2 + ItemDescriptionLen + ItemLength;
+               p += ItemLength;
+               if ((ItemLength == 200 || ItemLength == 220) && left == 0) {
+                       // might be split into the next extended event desc.
+                       saved_text = item_byte;
+                       return item;
+               }
+               // UNLIKELY
+               // join intra-desciptor split items
+               if (left >= 2 && ItemDescriptionLen > 0 && m_data[p] == 0) {
+                       saved_text = item_byte;
+                       continue;
+               }
+               if (ItemDescriptionLen == 0)
+                       item_byte.prepend(saved_text);
+               saved_text.clear();
+               item += dvb_decode_text((unsigned char *)item_byte.data(), item_byte.size());
+               if (ItemLength > 0)
+                   item += "\n";
+               if (left > 0)
+                   item += "\n";
+           }
+           return item;
+       }
     QMap<QString,QString> Items(void) const;
     // text_length 8
     uint TextLength(void)       const { return m_data[7 + LengthOfItems()]; }
@@ -1574,11 +1648,11 @@ class ServiceDescriptorMapping
 };
 
 // DVB Bluebook A038 (Sept 2011) p 80
-class ServiceDescriptor : public MPEGDescriptor
+class ServiceDescriptor : public DVBDescriptor
 {
   public:
-    explicit ServiceDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::service) { }
+    explicit ServiceDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::service) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x48
     // descriptor_length        8   1.0
@@ -1693,11 +1767,11 @@ class ServiceMoveDescriptor : public MPEGDescriptor
 };
 
 // DVB Bluebook A038 (Sept 2011) p 83
-class ShortEventDescriptor : public MPEGDescriptor
+class ShortEventDescriptor : public DVBDescriptor
 {
   public:
-    explicit ShortEventDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::short_event) { }
+    explicit ShortEventDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::short_event) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x4d
     // descriptor_length        8   1.0
@@ -1930,11 +2004,11 @@ class TimeShiftedServiceDescriptor : public MPEGDescriptor
 };
 
 // DVB Bluebook A038 (Sept 2011) p 90
-class TransportStreamDescriptor : public MPEGDescriptor
+class TransportStreamDescriptor : public DVBDescriptor
 {
   public:
-    explicit TransportStreamDescriptor(const unsigned char *data, int len = 300) :
-        MPEGDescriptor(data, len, DescriptorID::transport_stream) { }
+    explicit TransportStreamDescriptor(const unsigned char *data, DVBKind dvbkind, int len = 300) :
+        DVBDescriptor(data, dvbkind, len, DescriptorID::transport_stream) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x67
     // descriptor_length        8   1.0
@@ -2295,7 +2369,9 @@ class FreesatCallsignDescriptor : public MPEGDescriptor
         { return QString::fromLatin1((char *) m_data +2, 3); }
 
     QString Callsign(void) const
-        { return dvb_decode_short_name(&m_data[6], m_data[5]); }
+        // Hack 20200324 K.O
+        { return QString::fromLatin1((char *)(&m_data[6]), m_data[5]); }
+        //        { return dvb_decode_short_name(&m_data[6], m_data[5]); }
 
     QString toString(void) const override; // MPEGDescriptor
 };
@@ -2473,11 +2549,11 @@ class DefaultAuthorityDescriptor : public MPEGDescriptor
 /*
  * private UPC Cablecom (Austria) episode descriptor for Horizon middleware
  */
-class PrivateUPCCablecomEpisodeTitleDescriptor : public MPEGDescriptor
+class PrivateUPCCablecomEpisodeTitleDescriptor : public DVBDescriptor
 {
     public:
-     explicit PrivateUPCCablecomEpisodeTitleDescriptor(const unsigned char *data, int len = 300) :
-         MPEGDescriptor(data, len, PrivateDescriptorID::upc_event_episode_title) { }
+     explicit PrivateUPCCablecomEpisodeTitleDescriptor(const unsigned char *data, int len = 300, DVBKind dvbkind = kKindISDB) :
+         DVBDescriptor(data, dvbkind, len, PrivateDescriptorID::upc_event_episode_title) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0xa7
     // descriptor_length        8   1.0

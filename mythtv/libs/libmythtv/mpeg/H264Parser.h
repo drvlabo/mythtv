@@ -29,8 +29,9 @@
 // unistd.h up front so that the subsequent inclusions will be
 // skipped, and then define NULL to the right value.
 #include <unistd.h>
-#undef NULL
-#define NULL nullptr
+
+//#undef NULL
+//#define NULL nullptr
 
 #include <QString>
 #include <cstdint>
@@ -44,8 +45,8 @@
 // copied from libavutil/internal.h
 extern "C" {
 // Grr. NULL keeps getting redefined back to 0
-#undef NULL
-#define NULL nullptr
+//#undef NULL
+//#define NULL nullptr
 #include "libavutil/common.h" // for AV_GCC_VERSION_AT_LEAST()
 }
 #ifndef av_alias
@@ -58,8 +59,8 @@ extern "C" {
 
 extern "C" {
 // Grr. NULL keeps getting redefined back to 0
-#undef NULL
-#define NULL nullptr
+//#undef NULL
+//#define NULL nullptr
 #include "libavcodec/get_bits.h"
 }
 

@@ -20,6 +20,7 @@ using namespace std;
 #include <QEvent>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QInputMethodEvent>
 #include <QSize>
 #include <QWindow>
 
@@ -1126,6 +1127,7 @@ void MythMainWindow::Init(bool mayReInit)
         setAttribute(Qt::WA_NoSystemBackground);
         setAutoFillBackground(false);
     }
+    setAttribute(Qt::WA_InputMethodEnabled);
 
     MoveResize(d->m_screenRect);
     ShowPainterWindow();
@@ -2136,6 +2138,37 @@ bool MythMainWindow::eventFilter(QObject * /*watched*/, QEvent *e)
             }
             break;
         }
+        case QEvent::InputMethod:
+		{
+            ResetIdleTimer();
+            QInputMethodEvent *ie = dynamic_cast<QInputMethodEvent*>(e);
+			// Q: Is It OK? 20200506 K.O
+//            if (currentWidget())
+//            {
+//                ie->accept();
+//                QWidget *current = currentWidget();
+//                if (current && current->isEnabled())
+//                    qApp->notify(current, ie);
+//
+//                break;
+//            }
+            QVector<MythScreenStack *>::Iterator it;
+            for (it = d->m_stackList.end()-1; it != d->m_stackList.begin()-1; --it)
+            {
+                MythScreenType *top = (*it)->GetTopScreen();
+                if (top)
+                {
+                    if (top->inputMethodEvent(ie))
+                        return true;
+
+                    // Note:  The following break prevents keypresses being
+                    //        sent to windows below popups
+                    if ((*it)->objectName() == "popup stack")
+                        break;
+                }
+            }
+            break;
+		}
         case QEvent::MouseButtonPress:
         {
             ResetIdleTimer();

@@ -33,7 +33,8 @@ class MTV_PUBLIC DVBStreamData : virtual public MPEGStreamData
 {
   public:
     DVBStreamData(uint desired_netid, uint desired_tsid,
-                  int desired_program, int cardnum, bool cacheTables = false);
+                  int desired_program, int cardnum, bool cacheTables = false,
+                  DVBKind dvbkind = kKindDVB);
     ~DVBStreamData() override;
 
     using MPEGStreamData::Reset;
@@ -131,6 +132,7 @@ class MTV_PUBLIC DVBStreamData : virtual public MPEGStreamData
     /// DVB table monitoring
     uint                      m_desiredNetId;
     uint                      m_desiredTsId;
+    DVBKind                   m_dvbkind;
 
     // Real network ID for broken providers
     int                       m_dvbRealNetworkId { -1 };

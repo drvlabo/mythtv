@@ -97,6 +97,7 @@ desc_list_t MPEGDescriptor::FindAll(const desc_list_t &parsed, uint desc_tag)
     return tmp;
 }
 
+/*
 static uint maxPriority(const QMap<uint,uint> &langPrefs)
 {
     uint max_pri = 0;
@@ -207,6 +208,7 @@ desc_list_t MPEGDescriptor::FindBestMatches(
 
     return tmp;
 }
+*/
 
 #define EMPTY_STR_16 "","","","", "","","","", "","","","", "","","","",
 
@@ -431,10 +433,10 @@ QString MPEGDescriptor::toStringPD(uint priv_dsid) const
     {
         SET_STRING(HEVCVideoDescriptor);
     }
-    else if (DescriptorID::network_name == DescriptorTag())
-    {
-        SET_STRING(NetworkNameDescriptor);
-    }
+//    else if (DescriptorID::network_name == DescriptorTag())
+//    {
+//        SET_STRING(NetworkNameDescriptor);
+//    }
     else if (DescriptorID::service_list == DescriptorTag())
     {
         SET_STRING(ServiceListDescriptor);
@@ -447,14 +449,14 @@ QString MPEGDescriptor::toStringPD(uint priv_dsid) const
     {
         SET_STRING(CableDeliverySystemDescriptor);
     }
-    else if (DescriptorID::bouquet_name == DescriptorTag())
-    {
-        SET_STRING(BouquetNameDescriptor);
-    }
-    else if (DescriptorID::service == DescriptorTag())
-    {
-        SET_STRING(ServiceDescriptor);
-    }
+//    else if (DescriptorID::bouquet_name == DescriptorTag())
+//    {
+//        SET_STRING(BouquetNameDescriptor);
+//    }
+//    else if (DescriptorID::service == DescriptorTag())
+//    {
+//        SET_STRING(ServiceDescriptor);
+//    }
     else if (DescriptorID::country_availability == DescriptorTag())
     {
         SET_STRING(CountryAvailabilityDescriptor);

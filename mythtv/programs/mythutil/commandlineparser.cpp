@@ -3,6 +3,7 @@
 
 // local headers
 #include "commandlineparser.h"
+#include "mpegdescriptors.h"
 
 MythUtilCommandLineParser::MythUtilCommandLineParser() :
     MythCommandLineParser(MYTH_APPNAME_MYTHUTIL)
@@ -107,7 +108,7 @@ void MythUtilCommandLineParser::LoadArguments(void)
                 "access those files to do so. If enabled, this will also "
                 "trigger the bulk metadata scanner upon completion.")
                 ->SetGroup("Backend")
-        << add("--event", "event", QVariant::StringList, 
+        << add("--event", "event", QVariant::StringList,
                 "Send a backend event test message.", "")
                 ->SetGroup("Backend")
         << add("--systemevent", "systemevent", "",
@@ -195,6 +196,12 @@ void MythUtilCommandLineParser::LoadArguments(void)
     add("--noautopts", "noautopts", false, "Disables PTS discovery", "")
         ->SetChildOf("pidprinter");
     add("--xml", "xml", false, "Enables XML output of PSIP", "")
+        ->SetChildOf("pidprinter");
+
+    add("--is_dvb", "is_dvb", false, "Select wheather stream is DVB.", "")
+        ->SetChildOf("pidprinter");
+
+    add("--is_isdb", "is_isdb", true, "Select wheather stream is ISDB-T/S.", "")
         ->SetChildOf("pidprinter");
 
     // messageutils.cpp

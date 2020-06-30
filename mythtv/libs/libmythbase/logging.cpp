@@ -1104,7 +1104,7 @@ int verboseArgParse(const QString& arg)
 ///                 errno value itself.
 QString logStrerror(int errnum)
 {
-    return QString("%1 (%2)").arg(strerror(errnum)).arg(errnum);
+    return QString("%1 (%2)").arg(QString::fromLocal8Bit(strerror(errnum))).arg(errnum);
 }
 
 

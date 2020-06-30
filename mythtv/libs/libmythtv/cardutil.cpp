@@ -770,6 +770,15 @@ DTVTunerType CardUtil::ConvertToTunerType(DTVModulationSystem delsys)
         case DTVModulationSystem::kModulationSystem_DVBT2:
             tunertype = DTVTunerType::kTunerTypeDVBT2;
             break;
+        case DTVModulationSystem::kModulationSystem_ISDBT:
+            tunertype = DTVTunerType::kTunerTypeDVBT;
+            break;
+        case DTVModulationSystem::kModulationSystem_ISDBS:
+            tunertype = DTVTunerType::kTunerTypeDVBS1; // ISDB-S still be WRAPPING of DVBS1
+            break;
+        case DTVModulationSystem::kModulationSystem_ISDBC:
+            tunertype = DTVTunerType::kTunerTypeDVBC;
+            break;
         case DTVModulationSystem::kModulationSystem_ATSC:
             tunertype = DTVTunerType::kTunerTypeATSC;
             break;

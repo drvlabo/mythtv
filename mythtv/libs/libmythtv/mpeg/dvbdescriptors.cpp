@@ -1,5 +1,6 @@
 // C headers
 #include <unistd.h>
+#include <limits.h>
 #include <algorithm>
 
 // Qt headers
@@ -51,16 +52,34 @@ static QString decode_iso6937(const unsigned char *buf, uint length)
 
 static QString decode_text(const unsigned char *buf, uint length);
 
-// Decode a text string according to ETSI EN 300 468 Annex A
-QString dvb_decode_text(const unsigned char *src, uint raw_length,
+// Decode a text string according to ETSI EN 300 468 Annex A or ISDB/ARIB STD-24
+QString DVBDescriptor::dvb_decode_text(const unsigned char *src, uint raw_length,
                         const unsigned char *encoding_override,
-                        uint encoding_override_length)
+                        uint encoding_override_length) const
 {
     if (!raw_length)
         return "";
 
+    if (m_dvbkind == kKindISDB)
+    {
+        unsigned char buf[4096 * 6];
+        unsigned int len;
+        len = isdb_decode_text(hisdbdecode, src, (unsigned int)raw_length,
+                               buf, (unsigned int)sizeof(buf));
+        return QString::fromUtf8((const char *)buf, (int)len).
+           replace(QString("\n"), QString(" "));
+    }
+
     if (src[0] == 0x1f)
         return freesat_huffman_to_string(src, raw_length);
+
+    if (src[0] == 0x15)
+	return QString::fromUtf8((char *)(src + 1), raw_length - 1).
+	    replace(QString("\n"), QString(" "));
+    else if (src[0] == 0x11)
+	return QTextCodec::codecForName("UTF-16BE")->toUnicode((char *)(src + 1), raw_length - 1).
+	    replace(QString("\n"), QString(" "));
+
 
     /* UCS-2 aka ISO/IEC 10646-1 Basic Multilingual Plane */
     if (src[0] == 0x11)
@@ -172,7 +191,7 @@ static QString decode_text(const unsigned char *buf, uint length)
 }
 
 
-QString dvb_decode_short_name(const unsigned char *src, uint raw_length)
+QString DVBDescriptor::dvb_decode_short_name(const unsigned char *src, uint raw_length) const
 {
     if (raw_length > 50)
     {
@@ -182,6 +201,27 @@ QString dvb_decode_short_name(const unsigned char *src, uint raw_length)
                 .arg(raw_length));
         return "";
     }
+
+    if (src[0] == 0x15)
+	return QString::fromUtf8((char *)(src + 1), raw_length - 1).
+	    replace(QString("\n"), QString(" "));
+    else if (src[0] == 0x11)
+	return QTextCodec::codecForName("UTF-16BE")->toUnicode((char *)(src + 1), raw_length - 1).
+	    replace(QString("\n"), QString(" "));
+
+    if (m_dvbkind == kKindISDB)
+    {
+        unsigned char buf[50 * 6];
+        unsigned int len;
+        len = isdb_decode_text(hisdbdecode, src, (unsigned int)raw_length,
+                               buf, (unsigned int)sizeof(buf));
+        return QString::fromUtf8((const char *)buf, (int)len).
+           replace(QString("\n"), QString(" "));
+    }
+
+    if (src[0] == 0x11)
+       return QTextCodec::codecForName("UTF-16BE")->toUnicode((char *)(src + 1), raw_length - 1).
+           replace(QString("\n"), QString(" "));
 
     if (((0x10 < src[0]) && (src[0] < 0x15)) ||
         ((0x15 < src[0]) && (src[0] < 0x20)))
@@ -223,12 +263,148 @@ QString dvb_decode_short_name(const unsigned char *src, uint raw_length)
     return sStr;
 }
 
+static uint maxPriority(const QMap<uint,uint> &langPrefs)
+{
+    uint max_pri = 0;
+    QMap<uint,uint>::const_iterator it = langPrefs.begin();
+    for (; it != langPrefs.end(); ++it)
+        max_pri = max(max_pri, *it);
+    return max_pri;
+}
+
+const unsigned char *DVBDescriptor::FindBestMatch(
+    const desc_list_t &parsed, uint desc_tag, QMap<uint,uint> &langPrefs, DVBKind dvbkind)
+{
+    uint match_idx = 0;
+    uint match_pri = UINT_MAX;
+    int  unmatched_idx = -1;
+
+    uint i = (desc_tag == DescriptorID::short_event) ? 0 : parsed.size();
+    for (; i < parsed.size(); i++)
+    {
+        if (DescriptorID::short_event == parsed[i][0])
+        {
+            ShortEventDescriptor sed(parsed[i], dvbkind);
+            QMap<uint,uint>::const_iterator it =
+                langPrefs.find(sed.CanonicalLanguageKey());
+
+            if ((it != langPrefs.end()) && (*it < match_pri))
+            {
+                match_idx = i;
+                match_pri = *it;
+            }
+
+            if (unmatched_idx < 0)
+                unmatched_idx = i;
+        }
+    }
+
+    if (match_pri != UINT_MAX)
+        return parsed[match_idx];
+
+    if ((desc_tag == DescriptorID::short_event) && (unmatched_idx >= 0))
+    {
+        ShortEventDescriptor sed(parsed[unmatched_idx], dvbkind);
+        langPrefs[sed.CanonicalLanguageKey()] = maxPriority(langPrefs) + 1;
+        return parsed[unmatched_idx];
+    }
+
+    return NULL;
+}
+
+desc_list_t DVBDescriptor::FindBestMatches(
+    const desc_list_t &parsed, uint desc_tag, QMap<uint,uint> &langPrefs, DVBKind dvbkind)
+{
+    uint match_pri = UINT_MAX;
+    int  match_key = 0;
+    int  unmatched_idx = -1;
+
+    uint i = (desc_tag == DescriptorID::extended_event) ? 0 : parsed.size();
+    for (; i < parsed.size(); i++)
+    {
+        if (DescriptorID::extended_event == parsed[i][0])
+        {
+            ExtendedEventDescriptor eed(parsed[i], dvbkind);
+            QMap<uint,uint>::const_iterator it =
+                langPrefs.find(eed.CanonicalLanguageKey());
+
+            if ((it != langPrefs.end()) && (*it < match_pri))
+            {
+                match_key = eed.LanguageKey();
+                match_pri = *it;
+            }
+            if (unmatched_idx < 0)
+                unmatched_idx = i;
+        }
+    }
+
+    if ((desc_tag == DescriptorID::extended_event) &&
+        (match_key == 0) && (unmatched_idx >= 0))
+    {
+        ExtendedEventDescriptor eed(parsed[unmatched_idx], dvbkind);
+        langPrefs[eed.CanonicalLanguageKey()] = maxPriority(langPrefs) + 1;
+        match_key = eed.LanguageKey();
+    }
+
+    desc_list_t tmp;
+    if (match_pri == UINT_MAX)
+        return tmp;
+
+    for (uint i = 0; i < parsed.size(); i++)
+    {
+        if ((DescriptorID::extended_event == desc_tag) &&
+            (DescriptorID::extended_event == parsed[i][0]))
+        {
+            ExtendedEventDescriptor eed(parsed[i], dvbkind);
+            if (eed.LanguageKey() == match_key)
+                tmp.push_back(parsed[i]);
+        }
+    }
+    return tmp;
+}
+
+#define SET_STRING(DESC_NAME) do { \
+    if (IsValid()) { DESC_NAME d(m_data, m_dvbkind, DescriptorLength()+2); \
+    if (d.IsValid()) str = d.toString(); } } while (0)
+
+QString DVBDescriptor::toString() const
+{
+    QString str;
+
+    if (DescriptorID::network_name == DescriptorTag())
+        SET_STRING(NetworkNameDescriptor);
+    else if (DescriptorID::service == DescriptorTag())
+        SET_STRING(ServiceDescriptor);
+    else if (DescriptorID::bouquet_name == DescriptorTag())
+        SET_STRING(BouquetNameDescriptor);
+    else if (IsValid())
+    {
+        str = QString("%1 Descriptor (0x%2) length(%3)")
+            .arg(DescriptorTagString())
+            .arg(DescriptorTag(),2,16,QChar('0'))
+            .arg(DescriptorLength());
+     }
+     else
+     {
+         str = "Invalid Descriptor";
+     }
+     return str;
+}
+
 QMutex             ContentDescriptor::s_categoryLock;
 QMap<uint,QString> ContentDescriptor::s_categoryDesc;
 volatile bool      ContentDescriptor::s_categoryDescExists = false;
 
 ProgramInfo::CategoryType ContentDescriptor::GetMythCategory(uint i) const
 {
+    if (m_dvbkind == kKindISDB) {
+        if (0x6 == Nibble1(i))
+            return ProgramInfo::kCategoryMovie;
+        if (0x1 == Nibble1(i))
+            return ProgramInfo::kCategorySports;
+        return ProgramInfo::kCategoryTVShow;
+    }
+
     if (0x1 == Nibble1(i))
         return ProgramInfo::kCategoryMovie;
     if (0x4 == Nibble1(i))
@@ -278,7 +454,7 @@ QString LinkageDescriptor::MobileHandOverTypeString(void) const
 QString ContentDescriptor::GetDescription(uint i) const
 {
     if (!s_categoryDescExists)
-        Init();
+        Init(m_dvbkind);
 
     QMutexLocker locker(&s_categoryLock);
 
@@ -304,7 +480,7 @@ QString ContentDescriptor::toString() const
     return tmp;
 }
 
-void ContentDescriptor::Init(void)
+void ContentDescriptor::Init(DVBKind dvbkind)
 {
     QMutexLocker locker(&s_categoryLock);
 
@@ -314,6 +490,47 @@ void ContentDescriptor::Init(void)
     //: %1 is the main category, %2 is the subcategory
     QString subCatStr = QCoreApplication::translate("(Categories)",
         "%1 - %2", "Category with subcategory display");
+
+    if (dvbkind == kKindISDB) {
+        s_categoryDesc[0x00] = QCoreApplication::translate("(Categories)",
+                                                    "ニュース／報道", 0
+                                         );
+        s_categoryDesc[0x10] = QCoreApplication::translate("(Categories)",
+                                                          "スポーツ", 0
+                                         );
+        s_categoryDesc[0x20] = QCoreApplication::translate("(Categories)",
+                                                "情報／ワイドショー", 0
+                                         );
+        s_categoryDesc[0x30] = QCoreApplication::translate("(Categories)",
+                                                            "ドラマ", 0
+                                         );
+        s_categoryDesc[0x40] = QCoreApplication::translate("(Categories)",
+                                                              "音楽", 0
+                                         );
+        s_categoryDesc[0x50] = QCoreApplication::translate("(Categories)",
+                                                        "バラエティ", 0
+                                         );
+        s_categoryDesc[0x60] = QCoreApplication::translate("(Categories)",
+                                                              "映画", 0
+                                         );
+        s_categoryDesc[0x70] = QCoreApplication::translate("(Categories)",
+                                                      "アニメ／特撮", 0
+                                         );
+        s_categoryDesc[0x80] = QCoreApplication::translate("(Categories)",
+                                            "ドキュメンタリー／教養", 0
+                                         );
+        s_categoryDesc[0x90] = QCoreApplication::translate("(Categories)",
+                                                        "劇場／公演", 0
+                                         );
+        s_categoryDesc[0xA0] = QCoreApplication::translate("(Categories)",
+                                                        "趣味／教育", 0
+                                         );
+        s_categoryDesc[0xB0] = QCoreApplication::translate("(Categories)",
+                                                              "福祉", 0
+                                         );
+        s_categoryDescExists = true;
+        return;
+    }
 
     s_categoryDesc[0x10] = QCoreApplication::translate("(Categories)", "Movie");
     s_categoryDesc[0x11] = subCatStr
