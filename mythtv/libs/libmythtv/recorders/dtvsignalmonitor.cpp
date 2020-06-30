@@ -570,8 +570,10 @@ bool DTVSignalMonitor::IsAllGood(void) const
             return false;
     if ((m_flags & kDTVSigMon_WaitForNIT) && !m_matchingNIT.IsGood())
             return false;
+#if 0
     if ((m_flags & kDTVSigMon_WaitForSDT) && !m_matchingSDT.IsGood())
             return false;
+#endif
     if ((m_flags & kDTVSigMon_WaitForCrypt) && !m_matchingCrypt.IsGood())
             return false;
 
